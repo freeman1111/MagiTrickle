@@ -10,11 +10,12 @@ type Helper struct {
 	IPTables4   *iptables.IPTables
 	IPTables6   *iptables.IPTables
 
-	StartIdx uint32
-	Links    []string
+	StartIdx    uint32
+	Links       []string
+	BypassMarks []uint32
 }
 
-func New(chainPrefix, ipsetPrefix string, disableIPv4, disableIPv6 bool, startIdx uint32, links []string) (*Helper, error) {
+func New(chainPrefix, ipsetPrefix string, disableIPv4, disableIPv6 bool, startIdx uint32, links []string, bypassMarks []uint32) (*Helper, error) {
 	var ipt4, ipt6 *iptables.IPTables
 
 	if !disableIPv4 {
@@ -32,5 +33,6 @@ func New(chainPrefix, ipsetPrefix string, disableIPv4, disableIPv6 bool, startId
 		IPTables6:   ipt6,
 		StartIdx:    startIdx,
 		Links:       links,
+		BypassMarks: bypassMarks,
 	}, nil
 }

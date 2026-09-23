@@ -102,6 +102,7 @@ func (a *App) LoadConfig() error {
 		}
 
 		applyIfSet(&a.config.Link, cfg.App.Link)
+		applyIfSet(&a.config.BypassPolicies, cfg.App.BypassPolicies)
 		applyIfSet(&a.config.ShowAllInterfaces, cfg.App.ShowAllInterfaces)
 		applyIfSet(&a.config.LogLevel, cfg.App.LogLevel)
 	}
@@ -194,6 +195,7 @@ func (a *App) SaveConfig() error {
 				StartMarkTableIndex: &a.config.Netfilter.StartMarkTableIndex,
 			},
 			Link:              &a.config.Link,
+			BypassPolicies:    &a.config.BypassPolicies,
 			ShowAllInterfaces: &a.config.ShowAllInterfaces,
 			LogLevel:          &a.config.LogLevel,
 		},

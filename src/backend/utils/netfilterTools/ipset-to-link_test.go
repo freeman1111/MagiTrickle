@@ -46,3 +46,28 @@ func TestIPSetToLinkRoutesOnlyLinks(t *testing.T) {
 		t.Errorf("PREROUTING rules should be removed, got: %v", rules)
 	}
 }
+
+// TestIPSetToLinkBypassMarks проверяет, что трафик с марками политик не маркируется
+func TestIPSetToLinkBypassMarks(t *testing.T) {
+	nh := &Helper{ChainPrefix: "MT_", IpsetPrefix: "mt_", Links: []string{"br0"}, BypassMarks: []uint32{0xffffaa2, 0xffffaa5}}
+	r := nh.IPSetToLink("test", "nwg0", nh.IPSet("test"))
+	r.mark = 1
+
+	fake := iptables.NewFakeIPTables(iptables.ProtocolIPv4)
+	ipt := newTestIPTables(fake)
+
+	if err := r.insertIPTablesRules(ipt); err != nil {
+		t.Fatalf("insertIPTablesRules failed: %v", err)
+	}
+
+	expected := [][]string{
+		{"-m", "mark", "--mark", "0xffffaa2", "-j", "RETURN"},
+		{"-m", "mark", "--mark", "0xffffaa5", "-j", "RETURN"},
+		{"-m", "conntrack", "--ctdir", "REPLY", "-j", "RETURN"},
+		{"-m", "set", "--match-set", "mt_test_4", "dst", "-j", "MARK", "--set-mark", "1"},
+		{"-m", "set", "--match-set", "mt_test_4", "dst", "-j", "CONNMARK", "--save-mark"},
+	}
+	if rules := fake.GetRules("mangle", "MT_test"); !reflect.DeepEqual(rules, expected) {
+		t.Errorf("chain rules mismatch.\nExpected: %v\nGot: %v", expected, rules)
+	}
+}

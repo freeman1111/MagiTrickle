@@ -41,6 +41,7 @@ var DefaultAppConfig = models.AppConfig{
 		StartMarkTableIndex: 0x4D616769, // Magi
 	},
 	Link:              []string{"br0"},
+	BypassPolicies:    []string{},
 	ShowAllInterfaces: false,
 	LogLevel:          "info",
 }

@@ -7,6 +7,7 @@ type AppConfig struct {
 	DNSProxy          AppConfigDNSProxy
 	Netfilter         AppConfigNetfilter
 	Link              []string
+	BypassPolicies    []string
 	ShowAllInterfaces bool
 	LogLevel          string
 }

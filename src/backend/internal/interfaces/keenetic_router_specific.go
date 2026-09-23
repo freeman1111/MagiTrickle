@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -89,6 +91,30 @@ func (a *KeeneticRouterSpecificAPI) GetIfaceAliases() (map[string]string, error)
 	}
 
 	return aliases, nil
+}
+
+func (a *KeeneticRouterSpecificAPI) GetPolicyMark(name string) (uint32, error) {
+	resp, err := a.httpClient().Get(a.baseURL() + "/rci/show/ip/policy/" + url.PathEscape(name) + "/mark")
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("unexpected policy mark status: %s", resp.Status)
+	}
+
+	var mark string
+	if err := json.NewDecoder(resp.Body).Decode(&mark); err != nil {
+		return 0, fmt.Errorf("decode policy mark: %w", err)
+	}
+
+	value, err := strconv.ParseUint(strings.TrimPrefix(mark, "0x"), 16, 32)
+	if err != nil {
+		return 0, fmt.Errorf("parse policy mark %q: %w", mark, err)
+	}
+
+	return uint32(value), nil
 }
 
 func (a *KeeneticRouterSpecificAPI) httpClient() *http.Client {

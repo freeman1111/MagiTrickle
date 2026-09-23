@@ -76,3 +76,46 @@ func TestKeeneticRouterSpecificAPIGetIfaceAliasesUsesBatchRCI(t *testing.T) {
 		t.Fatalf("aliases[nwg1] = %q, want Backup VPN", aliases["nwg1"])
 	}
 }
+
+func TestKeeneticRouterSpecificAPIGetPolicyMark(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/rci/show/ip/policy/noMT/mark":
+			if err := json.NewEncoder(w).Encode("ffffaa2"); err != nil {
+				t.Fatalf("encode policy mark: %v", err)
+			}
+		case "/rci/show/ip/policy/Policy0/mark":
+			if err := json.NewEncoder(w).Encode("0xffffaa1"); err != nil {
+				t.Fatalf("encode policy mark: %v", err)
+			}
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	api := &KeeneticRouterSpecificAPI{
+		BaseURL: server.URL,
+		Client:  server.Client(),
+	}
+
+	mark, err := api.GetPolicyMark("noMT")
+	if err != nil {
+		t.Fatalf("GetPolicyMark returned error: %v", err)
+	}
+	if mark != 0xffffaa2 {
+		t.Fatalf("GetPolicyMark(noMT) = %#x, want 0xffffaa2", mark)
+	}
+
+	mark, err = api.GetPolicyMark("Policy0")
+	if err != nil {
+		t.Fatalf("GetPolicyMark returned error: %v", err)
+	}
+	if mark != 0xffffaa1 {
+		t.Fatalf("GetPolicyMark(Policy0) = %#x, want 0xffffaa1", mark)
+	}
+
+	if _, err := api.GetPolicyMark("missing"); err == nil {
+		t.Fatalf("GetPolicyMark(missing) should fail for unknown policy")
+	}
+}

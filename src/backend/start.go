@@ -11,12 +11,14 @@ import (
 	"time"
 
 	"magitrickle/api"
+	"magitrickle/internal/interfaces"
 	"magitrickle/utils/dnsMITMProxy"
 	"magitrickle/utils/iptables"
 	"magitrickle/utils/netfilterTools"
 	"magitrickle/utils/recordsCache"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -54,7 +56,18 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.recordsCache = recordsCache.New()
 	a.recordsCache.StartCleanup(ctx, 30*time.Second)
 
-	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link)
+	bypassMarks := make([]uint32, 0, len(a.config.BypassPolicies))
+	for _, policyName := range a.config.BypassPolicies {
+		mark, err := interfaces.GetPolicyMark(policyName)
+		if err != nil {
+			log.Warn().Err(err).Str("policy", policyName).Msg("failed to get policy mark, policy traffic will be routed")
+			continue
+		}
+		log.Debug().Str("policy", policyName).Int("mark", int(mark)).Msg("bypassing policy traffic")
+		bypassMarks = append(bypassMarks, mark)
+	}
+
+	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link, bypassMarks)
 	if err != nil {
 		return fmt.Errorf("netfilter helper init fail: %w", err)
 	}
