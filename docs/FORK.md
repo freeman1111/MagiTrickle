@@ -46,12 +46,16 @@ Workflow `.github/workflows/sync-upstream.yml`:
 
 ### Настройка (один раз)
 
-1. *Settings → Actions → General*: убедиться, что Actions включены и *Workflow permissions* = **Read and write**
-   (нужно для push и создания PR).
-2. *(рекомендуется)* Добавить секрет `SYNC_TOKEN` — Personal Access Token со scope `repo`
-   (*Settings → Secrets and variables → Actions*).
-   Без него push от `GITHUB_TOKEN` по правилам GitHub **не запускает** `build.yml`, то есть после автосинхронизации
-   тест-пакеты не соберутся, пока вы не запушите что-то сами. С `SYNC_TOKEN` сборка стартует автоматически.
+1. *Settings → Actions → General*: включить Actions (в форке они по умолчанию выключены) и выставить
+   *Workflow permissions* = **Read and write** (нужно для push и создания PR).
+2. **(обязательно)** Добавить секрет `SYNC_TOKEN` (*Settings → Secrets and variables → Actions*):
+   - classic Personal Access Token со scope **`repo`** и **`workflow`**, или
+   - fine-grained token на этот репозиторий с правами *Contents*, *Pull requests* и *Workflows* = Read and write.
+
+   Без `workflow` GitHub отклоняет push любых коммитов, которые меняют файлы в `.github/workflows/`.
+   Автор регулярно правит свой CI, поэтому встроенный `GITHUB_TOKEN` сломает синхронизацию на первом же таком
+   коммите. Кроме того, push от `GITHUB_TOKEN` по правилам GitHub **не запускает** `build.yml`, и тест-пакеты
+   после синхронизации не соберутся. Если секрета нет, workflow пишет предупреждение в лог запуска.
 3. *(для релизов)* Секрет `RELEASE_TOKEN` используется `build.yml`, чтобы прикреплять пакеты к GitHub Release.
 
 ## Ручное обновление (локально)

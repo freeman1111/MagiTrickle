@@ -7,9 +7,11 @@
 # * When the merge is clean it is pushed automatically; on conflicts a PR
 #   `upstream` -> `develop` is opened so the conflict can be resolved by hand.
 #
-# Optional secret SYNC_TOKEN (a PAT with `repo` scope): pushes made with the default
-# GITHUB_TOKEN do not trigger other workflows, so `build.yml` will not run after an
-# automatic sync. With SYNC_TOKEN the test packages are built automatically.
+# Required secret SYNC_TOKEN: a PAT with `repo` and `workflow` scopes (fine-grained:
+# Contents, Pull requests and Workflows read/write). The default GITHUB_TOKEN is not
+# allowed to push commits that modify `.github/workflows/*`, so the sync breaks as soon
+# as upstream changes its CI. Pushes made with GITHUB_TOKEN also do not trigger other
+# workflows, so `build.yml` would not run after a sync.
 name: Sync with upstream
 
 on:
@@ -45,6 +47,14 @@ jobs:
     name: Mirror upstream and merge into fork
     runs-on: ubuntu-latest
     steps:
+      - name: Check SYNC_TOKEN
+        env:
+          HAS_SYNC_TOKEN: ${{ secrets.SYNC_TOKEN != '' }}
+        run: |
+          if [ "$HAS_SYNC_TOKEN" != "true" ]; then
+            echo "::warning::SYNC_TOKEN is not set: pushing upstream commits that change .github/workflows will be rejected (see docs/FORK.md)"
+          fi
+
       - name: Checkout fork
         uses: actions/checkout@v4
         with:
