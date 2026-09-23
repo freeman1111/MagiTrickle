@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -26,6 +25,11 @@ type KeeneticRouterSpecificAPI struct {
 type keeneticInterfaceMeta struct {
 	Description   string `json:"description"`
 	InterfaceName string `json:"interface-name"`
+}
+
+type keeneticPolicyMeta struct {
+	Description string `json:"description"`
+	Mark        string `json:"mark"`
 }
 
 type keeneticInterfaceSystemNameRequest struct {
@@ -93,28 +97,46 @@ func (a *KeeneticRouterSpecificAPI) GetIfaceAliases() (map[string]string, error)
 	return aliases, nil
 }
 
+// GetPolicyMark ищет политику по системному имени (Policy0) или описанию из веб-интерфейса
 func (a *KeeneticRouterSpecificAPI) GetPolicyMark(name string) (uint32, error) {
-	resp, err := a.httpClient().Get(a.baseURL() + "/rci/show/ip/policy/" + url.PathEscape(name) + "/mark")
+	resp, err := a.httpClient().Get(a.baseURL() + "/rci/show/ip/policy")
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("unexpected policy mark status: %s", resp.Status)
+		return 0, fmt.Errorf("unexpected policy list status: %s", resp.Status)
 	}
 
-	var mark string
-	if err := json.NewDecoder(resp.Body).Decode(&mark); err != nil {
-		return 0, fmt.Errorf("decode policy mark: %w", err)
+	var payload map[string]json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return 0, fmt.Errorf("decode policy list: %w", err)
+	}
+	if nested, ok := payload["policy"]; ok {
+		// CLI-style wrapper: {"policy": {...}, "prompt": "(config)"}
+		if err := json.Unmarshal(nested, &payload); err != nil {
+			return 0, fmt.Errorf("decode policy list: %w", err)
+		}
 	}
 
-	value, err := strconv.ParseUint(strings.TrimPrefix(mark, "0x"), 16, 32)
-	if err != nil {
-		return 0, fmt.Errorf("parse policy mark %q: %w", mark, err)
+	for policyID, raw := range payload {
+		var meta keeneticPolicyMeta
+		if err := json.Unmarshal(raw, &meta); err != nil {
+			continue
+		}
+		if policyID != name && strings.TrimSpace(meta.Description) != name {
+			continue
+		}
+
+		value, err := strconv.ParseUint(strings.TrimPrefix(meta.Mark, "0x"), 16, 32)
+		if err != nil {
+			return 0, fmt.Errorf("parse policy mark %q: %w", meta.Mark, err)
+		}
+		return uint32(value), nil
 	}
 
-	return uint32(value), nil
+	return 0, fmt.Errorf("policy %q not found", name)
 }
 
 func (a *KeeneticRouterSpecificAPI) httpClient() *http.Client {
