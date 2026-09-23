@@ -124,6 +124,9 @@ func TestKeeneticRouterSpecificAPIGetPolicyMarks(t *testing.T) {
 			if _, ok := marks["missing"]; ok {
 				t.Fatalf("marks should not contain unknown policy")
 			}
+			if len(marks) != 5 {
+				t.Fatalf("marks = %v, want 3 system names and 2 descriptions", marks)
+			}
 		})
 	}
 }

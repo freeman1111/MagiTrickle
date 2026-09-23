@@ -115,6 +115,7 @@ func (a *KeeneticRouterSpecificAPI) GetPolicyMarks() (map[string]uint32, error) 
 	}
 	if nested, ok := payload["policy"]; ok {
 		// CLI-style wrapper: {"policy": {...}, "prompt": "(config)"}
+		payload = nil
 		if err := json.Unmarshal(nested, &payload); err != nil {
 			return nil, fmt.Errorf("decode policy list: %w", err)
 		}
