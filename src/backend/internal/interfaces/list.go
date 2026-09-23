@@ -37,9 +37,9 @@ func List(showAll bool) ([]models.InterfaceInfo, error) {
 	return interfaces, nil
 }
 
-// GetPolicyMark возвращает fwmark, которым роутер помечает трафик устройств политики доступа
-func GetPolicyMark(name string) (uint32, error) {
-	return routerAPI.GetPolicyMark(name)
+// GetPolicyMarks возвращает fwmark политик доступа по их системным именам и описаниям
+func GetPolicyMarks() (map[string]uint32, error) {
+	return routerAPI.GetPolicyMarks()
 }
 
 func filterManaged(interfaces []net.Interface) []net.Interface {

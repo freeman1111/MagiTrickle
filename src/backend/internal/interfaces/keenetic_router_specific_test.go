@@ -77,17 +77,20 @@ func TestKeeneticRouterSpecificAPIGetIfaceAliasesUsesBatchRCI(t *testing.T) {
 	}
 }
 
-func TestKeeneticRouterSpecificAPIGetPolicyMark(t *testing.T) {
+func TestKeeneticRouterSpecificAPIGetPolicyMarks(t *testing.T) {
 	policies := map[string]keeneticPolicyMeta{
 		"Policy0": {Description: "Germany-AWG", Mark: "ffffaaa"},
 		"Policy4": {Description: "noMT", Mark: "ffffaad"},
+		"Policy5": {Description: "Policy0", Mark: "ffffaaf"},
 	}
 	for name, payload := range map[string]any{
 		"plain":   policies,
 		"wrapped": map[string]any{"policy": policies, "prompt": "(config)"},
 	} {
 		t.Run(name, func(t *testing.T) {
+			requests := 0
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				requests++
 				if r.URL.Path != "/rci/show/ip/policy" {
 					t.Fatalf("unexpected request path: %s", r.URL.Path)
 				}
@@ -102,24 +105,24 @@ func TestKeeneticRouterSpecificAPIGetPolicyMark(t *testing.T) {
 				Client:  server.Client(),
 			}
 
-			mark, err := api.GetPolicyMark("noMT")
+			marks, err := api.GetPolicyMarks()
 			if err != nil {
-				t.Fatalf("GetPolicyMark returned error: %v", err)
+				t.Fatalf("GetPolicyMarks returned error: %v", err)
 			}
-			if mark != 0xffffaad {
-				t.Fatalf("GetPolicyMark(noMT) = %#x, want 0xffffaad", mark)
+			if requests != 1 {
+				t.Fatalf("policy list request count = %d, want 1", requests)
 			}
-
-			mark, err = api.GetPolicyMark("Policy0")
-			if err != nil {
-				t.Fatalf("GetPolicyMark returned error: %v", err)
+			if marks["noMT"] != 0xffffaad {
+				t.Fatalf("marks[noMT] = %#x, want 0xffffaad", marks["noMT"])
 			}
-			if mark != 0xffffaaa {
-				t.Fatalf("GetPolicyMark(Policy0) = %#x, want 0xffffaaa", mark)
+			if marks["Policy4"] != 0xffffaad {
+				t.Fatalf("marks[Policy4] = %#x, want 0xffffaad", marks["Policy4"])
 			}
-
-			if _, err := api.GetPolicyMark("missing"); err == nil {
-				t.Fatalf("GetPolicyMark(missing) should fail for unknown policy")
+			if marks["Policy0"] != 0xffffaaa {
+				t.Fatalf("marks[Policy0] = %#x, want 0xffffaaa (system name must win over description)", marks["Policy0"])
+			}
+			if _, ok := marks["missing"]; ok {
+				t.Fatalf("marks should not contain unknown policy")
 			}
 		})
 	}

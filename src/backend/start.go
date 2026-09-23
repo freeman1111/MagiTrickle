@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"magitrickle/api"
-	"magitrickle/internal/interfaces"
 	"magitrickle/utils/dnsMITMProxy"
 	"magitrickle/utils/iptables"
 	"magitrickle/utils/netfilterTools"
@@ -56,15 +55,12 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.recordsCache = recordsCache.New()
 	a.recordsCache.StartCleanup(ctx, 30*time.Second)
 
-	bypassMarks := make([]uint32, 0, len(a.config.BypassPolicies))
-	for _, policyName := range a.config.BypassPolicies {
-		mark, err := interfaces.GetPolicyMark(policyName)
-		if err != nil {
-			log.Warn().Err(err).Str("policy", policyName).Msg("failed to get policy mark, policy traffic will be routed")
-			continue
-		}
-		log.Debug().Str("policy", policyName).Int("mark", int(mark)).Msg("bypassing policy traffic")
-		bypassMarks = append(bypassMarks, mark)
+	bypassMarks, missingPolicies, err := resolveBypassMarks(a.config.BypassPolicies)
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to get access policy marks, policy traffic will be routed")
+	}
+	for _, policyName := range missingPolicies {
+		log.Warn().Str("policy", policyName).Msg("access policy not found, its traffic will be routed")
 	}
 
 	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link, bypassMarks)

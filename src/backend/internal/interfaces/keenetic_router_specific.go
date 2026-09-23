@@ -97,46 +97,51 @@ func (a *KeeneticRouterSpecificAPI) GetIfaceAliases() (map[string]string, error)
 	return aliases, nil
 }
 
-// GetPolicyMark ищет политику по системному имени (Policy0) или описанию из веб-интерфейса
-func (a *KeeneticRouterSpecificAPI) GetPolicyMark(name string) (uint32, error) {
+// GetPolicyMarks возвращает fwmark всех политик одним запросом, ключи: системное имя (Policy0) и описание из веб-интерфейса
+func (a *KeeneticRouterSpecificAPI) GetPolicyMarks() (map[string]uint32, error) {
 	resp, err := a.httpClient().Get(a.baseURL() + "/rci/show/ip/policy")
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("unexpected policy list status: %s", resp.Status)
+		return nil, fmt.Errorf("unexpected policy list status: %s", resp.Status)
 	}
 
 	var payload map[string]json.RawMessage
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return 0, fmt.Errorf("decode policy list: %w", err)
+		return nil, fmt.Errorf("decode policy list: %w", err)
 	}
 	if nested, ok := payload["policy"]; ok {
 		// CLI-style wrapper: {"policy": {...}, "prompt": "(config)"}
 		if err := json.Unmarshal(nested, &payload); err != nil {
-			return 0, fmt.Errorf("decode policy list: %w", err)
+			return nil, fmt.Errorf("decode policy list: %w", err)
 		}
 	}
 
+	marks := make(map[string]uint32, len(payload)*2)
+	systemNames := make(map[string]uint32, len(payload))
 	for policyID, raw := range payload {
 		var meta keeneticPolicyMeta
 		if err := json.Unmarshal(raw, &meta); err != nil {
 			continue
 		}
-		if policyID != name && strings.TrimSpace(meta.Description) != name {
-			continue
-		}
-
 		value, err := strconv.ParseUint(strings.TrimPrefix(meta.Mark, "0x"), 16, 32)
 		if err != nil {
-			return 0, fmt.Errorf("parse policy mark %q: %w", meta.Mark, err)
+			continue
 		}
-		return uint32(value), nil
+		systemNames[policyID] = uint32(value)
+		if description := strings.TrimSpace(meta.Description); description != "" {
+			marks[description] = uint32(value)
+		}
+	}
+	// системное имя важнее описания, если они совпали у разных политик
+	for policyID, mark := range systemNames {
+		marks[policyID] = mark
 	}
 
-	return 0, fmt.Errorf("policy %q not found", name)
+	return marks, nil
 }
 
 func (a *KeeneticRouterSpecificAPI) httpClient() *http.Client {
