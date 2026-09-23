@@ -1,0 +1,126 @@
+# Fork-only workflow: keeps this fork in sync with the official MagiTrickle repository.
+#
+#   upstream (GitLab develop)  --mirror-->  origin/upstream   --merge-->  origin/develop
+#
+# * `upstream` branch is an exact copy of the official `develop` (never commit to it).
+# * `develop` is the fork's own branch: official code + fork changes.
+# * When the merge is clean it is pushed automatically; on conflicts a PR
+#   `upstream` -> `develop` is opened so the conflict can be resolved by hand.
+#
+# Optional secret SYNC_TOKEN (a PAT with `repo` scope): pushes made with the default
+# GITHUB_TOKEN do not trigger other workflows, so `build.yml` will not run after an
+# automatic sync. With SYNC_TOKEN the test packages are built automatically.
+name: Sync with upstream
+
+on:
+  schedule:
+    - cron: '17 4 * * *'   # daily, 04:17 UTC
+  workflow_dispatch:
+    inputs:
+      upstream_ref:
+        description: Upstream branch to sync from
+        default: develop
+        required: true
+      merge:
+        description: Merge upstream into the fork branch (otherwise only update the mirror branch)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: sync-upstream
+  cancel-in-progress: false
+
+env:
+  UPSTREAM_URL: https://gitlab.com/magitrickle/magitrickle.git
+  UPSTREAM_REF: ${{ github.event.inputs.upstream_ref || 'develop' }}
+  MIRROR_BRANCH: upstream
+  FORK_BRANCH: develop
+
+jobs:
+  sync:
+    name: Mirror upstream and merge into fork
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout fork
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.FORK_BRANCH }}
+          fetch-depth: 0
+          token: ${{ secrets.SYNC_TOKEN || github.token }}
+
+      - name: Configure git
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Fetch upstream
+        run: |
+          git remote add upstream "$UPSTREAM_URL"
+          git fetch --tags upstream "$UPSTREAM_REF"
+
+      - name: Update mirror branch and tags
+        run: |
+          # The mirror branch must be identical to upstream, so a forced update is intended.
+          git push origin "+refs/remotes/upstream/${UPSTREAM_REF}:refs/heads/${MIRROR_BRANCH}"
+          git push origin --tags || echo "::warning::some tags could not be pushed (already exist in the fork with a different commit)"
+
+      - name: Merge upstream into fork branch
+        id: merge
+        if: ${{ github.event_name == 'schedule' || github.event.inputs.merge == 'true' }}
+        run: |
+          git checkout "$FORK_BRANCH"
+          if git merge-base --is-ancestor "upstream/${UPSTREAM_REF}" HEAD; then
+            echo "Fork branch already contains upstream/${UPSTREAM_REF}"
+            echo "result=up-to-date" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git merge --no-edit --no-ff "upstream/${UPSTREAM_REF}" \
+               -m "Merge upstream ${UPSTREAM_REF} ($(git rev-parse --short "upstream/${UPSTREAM_REF}")) into ${FORK_BRANCH}"; then
+            git push origin "$FORK_BRANCH"
+            echo "result=merged" >> "$GITHUB_OUTPUT"
+          else
+            git merge --abort
+            echo "result=conflict" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Open PR on merge conflict
+        if: ${{ steps.merge.outputs.result == 'conflict' }}
+        env:
+          GH_TOKEN: ${{ secrets.SYNC_TOKEN || github.token }}
+        run: |
+          existing=$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$MIRROR_BRANCH" --base "$FORK_BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            echo "PR #$existing already open, nothing to do"
+            exit 0
+          fi
+          gh pr create --repo "$GITHUB_REPOSITORY" \
+            --head "$MIRROR_BRANCH" --base "$FORK_BRANCH" \
+            --title "Sync with upstream ${UPSTREAM_REF} (conflicts)" \
+            --body "$(printf '%s\n' \
+              "Automatic merge of upstream \`${UPSTREAM_REF}\` into \`${FORK_BRANCH}\` failed because of conflicts." \
+              "" \
+              "Resolve them locally:" \
+              '```sh' \
+              "git fetch origin" \
+              "git checkout ${FORK_BRANCH}" \
+              "git merge origin/${MIRROR_BRANCH}" \
+              "# resolve conflicts, then:" \
+              "git commit && git push" \
+              '```' \
+              "" \
+              "See docs/FORK.md for details.")"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Upstream sync"
+            echo "- upstream: \`${UPSTREAM_URL}\` @ \`${UPSTREAM_REF}\` → $(git rev-parse --short "upstream/${UPSTREAM_REF}" 2>/dev/null || echo '?')"
+            echo "- mirror branch: \`${MIRROR_BRANCH}\`"
+            echo "- fork branch: \`${FORK_BRANCH}\`"
+            echo "- result: \`${{ steps.merge.outputs.result || 'mirror-only' }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
