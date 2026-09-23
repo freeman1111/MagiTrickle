@@ -22,19 +22,18 @@ type IPSetToLink struct {
 	enabled atomic.Bool
 	locker  sync.Mutex
 
-	chainName   string
-	ifaceName   string
-	startIdx    uint32
-	links       []string
-	bypassMarks []uint32
-	ipset       *IPSet
-	nh          *Helper
-	mark        uint32
-	table       int
-	ip4Rule     *netlink.Rule
-	ip6Rule     *netlink.Rule
-	ip4Route    [2]*netlink.Route
-	ip6Route    [2]*netlink.Route
+	chainName string
+	ifaceName string
+	startIdx  uint32
+	links     []string
+	ipset     *IPSet
+	nh        *Helper
+	mark      uint32
+	table     int
+	ip4Rule   *netlink.Rule
+	ip6Rule   *netlink.Rule
+	ip4Route  [2]*netlink.Route
+	ip6Route  [2]*netlink.Route
 }
 
 func (r *IPSetToLink) insertIPTablesRules(ipt *iptables.IPTables) error {
@@ -79,7 +78,7 @@ func (r *IPSetToLink) insertIPTablesRules(ipt *iptables.IPTables) error {
 		return fmt.Errorf("failed to create chain: %w", err)
 	}
 
-	for _, bypassMark := range r.bypassMarks {
+	for _, bypassMark := range r.nh.BypassMarks.Load() {
 		err = ipt.Append("mangle", r.chainName, "-m", "mark", "--mark", "0x"+strconv.FormatUint(uint64(bypassMark), 16), "-j", "RETURN")
 		if err != nil {
 			return fmt.Errorf("failed to append rule: %w", err)
@@ -557,12 +556,11 @@ func (r *IPSetToLink) AddrChangeHook(event netlink.AddrUpdate) error {
 
 func (nh *Helper) IPSetToLink(name string, ifaceName string, ipset *IPSet) *IPSetToLink {
 	return &IPSetToLink{
-		nh:          nh,
-		chainName:   nh.ChainPrefix + name,
-		ifaceName:   ifaceName,
-		ipset:       ipset,
-		startIdx:    nh.StartIdx,
-		links:       nh.Links,
-		bypassMarks: nh.BypassMarks,
+		nh:        nh,
+		chainName: nh.ChainPrefix + name,
+		ifaceName: ifaceName,
+		ipset:     ipset,
+		startIdx:  nh.StartIdx,
+		links:     nh.Links,
 	}
 }

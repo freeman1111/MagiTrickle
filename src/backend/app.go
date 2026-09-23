@@ -42,6 +42,8 @@ type App struct {
 	subscriptionRuleSets []*RuleSet
 	dnsOverrider         *netfilterTools.PortRemap
 	subscriptions        []*models.Subscription
+
+	bypassMarksRefresh chan struct{}
 }
 
 // New создаёт новый экземпляр App

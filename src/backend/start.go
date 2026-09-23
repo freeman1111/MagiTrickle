@@ -17,7 +17,6 @@ import (
 	"magitrickle/utils/recordsCache"
 
 	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -55,19 +54,13 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.recordsCache = recordsCache.New()
 	a.recordsCache.StartCleanup(ctx, 30*time.Second)
 
-	bypassMarks, missingPolicies, err := resolveBypassMarks(a.config.BypassPolicies)
-	if err != nil {
-		log.Warn().Err(err).Msg("failed to get access policy marks, policy traffic will be routed")
-	}
-	for _, policyName := range missingPolicies {
-		log.Warn().Str("policy", policyName).Msg("access policy not found, its traffic will be routed")
-	}
-
-	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link, bypassMarks)
+	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link)
 	if err != nil {
 		return fmt.Errorf("netfilter helper init fail: %w", err)
 	}
 	a.nfHelper = nfh
+
+	a.setupBypassPolicies(ctx)
 
 	for _, ipt := range []*iptables.IPTables{a.nfHelper.IPTables4, a.nfHelper.IPTables6} {
 		if ipt == nil {
@@ -167,6 +160,8 @@ func (a *App) Start(ctx context.Context) (err error) {
 }
 
 func (a *App) ForceCommitIPTables() error {
+	a.requestBypassMarksRefresh()
+
 	if a.nfHelper == nil {
 		return nil
 	}
