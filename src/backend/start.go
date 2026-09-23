@@ -54,7 +54,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.recordsCache = recordsCache.New()
 	a.recordsCache.StartCleanup(ctx, 30*time.Second)
 
-	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex)
+	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link)
 	if err != nil {
 		return fmt.Errorf("netfilter helper init fail: %w", err)
 	}

@@ -25,6 +25,7 @@ type IPSetToLink struct {
 	chainName string
 	ifaceName string
 	startIdx  uint32
+	links     []string
 	ipset     *IPSet
 	nh        *Helper
 	mark      uint32
@@ -89,9 +90,11 @@ func (r *IPSetToLink) insertIPTablesRules(ipt *iptables.IPTables) error {
 		}
 	}
 
-	err = ipt.Append("mangle", "PREROUTING", "-j", r.chainName)
-	if err != nil {
-		return fmt.Errorf("failed to append rule to PREROUTING: %w", err)
+	for _, linkName := range r.links {
+		err = ipt.Append("mangle", "PREROUTING", "-i", linkName, "-j", r.chainName)
+		if err != nil {
+			return fmt.Errorf("failed to append rule to PREROUTING: %w", err)
+		}
 	}
 
 	/*
@@ -149,9 +152,11 @@ func (r *IPSetToLink) deleteIPTablesRules(ipt *iptables.IPTables) error {
 		errs = append(errs, fmt.Errorf("failed to delete chain: %w", err))
 	}
 
-	err = ipt.Delete("mangle", "PREROUTING", "-j", r.chainName)
-	if err != nil {
-		errs = append(errs, fmt.Errorf("failed to unlinking chain: %w", err))
+	for _, linkName := range r.links {
+		err = ipt.Delete("mangle", "PREROUTING", "-i", linkName, "-j", r.chainName)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("failed to unlinking chain: %w", err))
+		}
 	}
 
 	/*
@@ -549,5 +554,6 @@ func (nh *Helper) IPSetToLink(name string, ifaceName string, ipset *IPSet) *IPSe
 		ifaceName: ifaceName,
 		ipset:     ipset,
 		startIdx:  nh.StartIdx,
+		links:     nh.Links,
 	}
 }
