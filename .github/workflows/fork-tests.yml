@@ -1,0 +1,43 @@
+# Fork-only workflow: runs backend vet and tests with the build tags that upstream's
+# check.yml does not pass. Tests of the fork (and some upstream ones) are guarded by
+# the `testing` tag, Keenetic RCI tests additionally by `entware_kn`.
+name: Fork backend tests
+
+on:
+  push:
+    paths:
+      - 'src/backend/**'
+      - '.github/workflows/fork-tests.yml'
+  pull_request:
+    paths:
+      - 'src/backend/**'
+      - '.github/workflows/fork-tests.yml'
+
+jobs:
+  test:
+    name: Backend tests (${{ matrix.tags }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tags:
+          - testing
+          - testing entware_kn
+          - testing openwrt
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: src/backend/go.sum
+
+      - name: Vet
+        working-directory: ./src/backend
+        run: GOOS=linux go vet -tags "${{ matrix.tags }}" ./...
+
+      - name: Test
+        working-directory: ./src/backend
+        run: GOOS=linux go test -race -tags "${{ matrix.tags }}" ./...
