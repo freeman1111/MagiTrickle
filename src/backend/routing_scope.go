@@ -19,13 +19,17 @@ const policiesRetryInterval = 15 * time.Second
 // setupPolicies читает политики доступа роутера до включения групп и следит за их изменением.
 // Политики нужны для bypassPolicies и для групп, направленных в политику вместо интерфейса
 func (a *App) setupPolicies(ctx context.Context) {
-	bypassNames := slices.Clone(a.config.BypassPolicies)
-
 	policies, err := interfaces.GetPolicies()
 	if errors.Is(err, interfaces.ErrPoliciesNotSupported) {
 		log.Debug().Err(err).Msg("access policies are disabled")
 		return
 	}
+
+	forkCfg, cfgErr := loadForkConfig(forkCfgFileLocation)
+	if cfgErr != nil {
+		log.Error().Err(cfgErr).Msg("failed to load fork config, no access policies are bypassed")
+	}
+	bypassNames := forkCfg.BypassPolicies
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to get access policies, will retry")
 	} else {

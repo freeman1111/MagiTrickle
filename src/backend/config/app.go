@@ -7,7 +7,6 @@ type App struct {
 	DNSProxy          *DNSProxy  `yaml:"dnsProxy"`
 	Netfilter         *Netfilter `yaml:"netfilter"`
 	Link              *[]string  `yaml:"link"`
-	BypassPolicies    *[]string  `yaml:"bypassPolicies"`
 	ShowAllInterfaces *bool      `yaml:"showAllInterfaces"`
 	LogLevel          *string    `yaml:"logLevel"`
 }

@@ -32,7 +32,6 @@ app:
     startMarkTableIndex: 1298229097
   link:
     - br0
-  bypassPolicies: []
   showAllInterfaces: false
   logLevel: info
 groups:
