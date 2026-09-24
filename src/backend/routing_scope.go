@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"magitrickle/internal/interfaces"
@@ -12,80 +14,90 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const bypassMarksRetryInterval = 15 * time.Second
+const policiesRetryInterval = 15 * time.Second
 
-// setupBypassPolicies получает метки политик из bypassPolicies до включения групп и следит за их изменением
-func (a *App) setupBypassPolicies(ctx context.Context) {
-	policyNames := slices.Clone(a.config.BypassPolicies)
-	if len(policyNames) == 0 {
-		return
-	}
+// setupPolicies читает политики доступа роутера до включения групп и следит за их изменением.
+// Политики нужны для bypassPolicies и для групп, направленных в политику вместо интерфейса
+func (a *App) setupPolicies(ctx context.Context) {
+	bypassNames := slices.Clone(a.config.BypassPolicies)
 
-	marks, missing, err := resolveBypassMarks(policyNames)
+	policies, err := interfaces.GetPolicies()
 	if errors.Is(err, interfaces.ErrPoliciesNotSupported) {
-		log.Warn().Err(err).Msg("bypassPolicies is ignored")
+		log.Debug().Err(err).Msg("access policies are disabled")
 		return
 	}
 	if err != nil {
-		log.Warn().Err(err).Msg("failed to get access policy marks, policy traffic will be routed until retry")
+		log.Warn().Err(err).Msg("failed to get access policies, will retry")
 	} else {
-		err = a.applyBypassMarks(marks, missing)
+		err = a.applyPolicies(policies, bypassNames)
 	}
 
-	a.bypassMarksRefresh = make(chan struct{}, 1)
-	go a.watchBypassMarks(ctx, policyNames, err != nil)
+	a.policiesRefresh = make(chan struct{}, 1)
+	go a.watchPolicies(ctx, bypassNames, err != nil)
 }
 
-// requestBypassMarksRefresh просит перечитать метки политик, не блокируя вызывающего
-func (a *App) requestBypassMarksRefresh() {
+// requestPoliciesRefresh просит перечитать политики, не блокируя вызывающего
+func (a *App) requestPoliciesRefresh() {
 	select {
-	case a.bypassMarksRefresh <- struct{}{}:
+	case a.policiesRefresh <- struct{}{}:
 	default:
 	}
 }
 
-// watchBypassMarks перечитывает метки по событиям netfilter.d, а пока роутер не отвечает, повторяет попытки
-func (a *App) watchBypassMarks(ctx context.Context, policyNames []string, retryNeeded bool) {
+// watchPolicies перечитывает политики по событиям netfilter.d, а пока роутер не отвечает, повторяет попытки
+func (a *App) watchPolicies(ctx context.Context, bypassNames []string, retryNeeded bool) {
 	var retry <-chan time.Time
 	if retryNeeded {
-		retry = time.After(bypassMarksRetryInterval)
+		retry = time.After(policiesRetryInterval)
 	}
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case <-a.bypassMarksRefresh:
+		case <-a.policiesRefresh:
 		case <-retry:
 		}
 
 		retry = nil
-		if err := a.refreshBypassMarks(policyNames); err != nil {
-			log.Warn().Err(err).Msg("failed to refresh access policy marks")
-			retry = time.After(bypassMarksRetryInterval)
+		if err := a.refreshPolicies(bypassNames); err != nil {
+			log.Warn().Err(err).Msg("failed to refresh access policies")
+			retry = time.After(policiesRetryInterval)
 		}
 	}
 }
 
-// refreshBypassMarks перечитывает метки политик; при ошибке запроса прежние метки остаются в силе
-func (a *App) refreshBypassMarks(policyNames []string) error {
-	marks, missing, err := resolveBypassMarks(policyNames)
+// refreshPolicies перечитывает политики; при ошибке запроса прежние метки остаются в силе
+func (a *App) refreshPolicies(bypassNames []string) error {
+	policies, err := interfaces.GetPolicies()
 	if err != nil {
 		return err
 	}
-	if slices.Equal(marks, a.nfHelper.BypassMarks.Load()) {
-		return nil
-	}
-	return a.applyBypassMarks(marks, missing)
+	return a.applyPolicies(policies, bypassNames)
 }
 
-func (a *App) applyBypassMarks(marks []uint32, missing []string) error {
-	for _, policyName := range missing {
-		log.Warn().Str("policy", policyName).Msg("access policy not found, its traffic will be routed")
+func (a *App) applyPolicies(policies []interfaces.Policy, bypassNames []string) error {
+	policyMarks := make(map[string]uint32, len(policies))
+	for _, policy := range policies {
+		policyMarks[policy.ID] = policy.Mark
+	}
+	bypassMarks, missing := pickBypassMarks(bypassNames, policies)
+
+	current := a.nfHelper.Policies.Load()
+	if current != nil && maps.Equal(policyMarks, current) && slices.Equal(bypassMarks, a.nfHelper.BypassMarks.Load()) {
+		return nil
 	}
 
-	a.nfHelper.BypassMarks.Store(marks)
-	log.Info().Int("count", len(marks)).Msg("access policy marks updated")
+	for _, policyName := range missing {
+		log.Info().Str("policy", policyName).Msg("access policy from bypassPolicies not found, nothing to bypass")
+	}
+
+	a.nfHelper.Policies.Store(policyMarks)
+	a.nfHelper.BypassMarks.Store(bypassMarks)
+	log.Info().
+		Int("policies", len(policyMarks)).
+		Int("bypass", len(bypassMarks)).
+		Msg("access policies updated")
 
 	var errs []error
 	for _, group := range a.ruleSetSnapshot() {
@@ -107,31 +119,19 @@ func (g *RuleSet) RefreshIPTables() error {
 	return g.ipsetToLink.RefreshIPTablesRules()
 }
 
-// resolveBypassMarks возвращает fwmark политик доступа из bypassPolicies одним запросом к роутеру
-func resolveBypassMarks(policyNames []string) (marks []uint32, missing []string, err error) {
-	if len(policyNames) == 0 {
-		return nil, nil, nil
-	}
-
-	policyMarks, err := interfaces.GetPolicyMarks()
-	if err != nil {
-		return nil, nil, err
-	}
-
-	marks, missing = pickBypassMarks(policyNames, policyMarks)
-	return marks, missing, nil
-}
-
-func pickBypassMarks(policyNames []string, policyMarks map[string]uint32) (marks []uint32, missing []string) {
+// pickBypassMarks находит метки политик из bypassPolicies по системному имени или описанию без учёта регистра
+func pickBypassMarks(policyNames []string, policies []interfaces.Policy) (marks []uint32, missing []string) {
 	marks = make([]uint32, 0, len(policyNames))
 	for _, policyName := range policyNames {
-		mark, ok := policyMarks[policyName]
-		if !ok {
+		idx := slices.IndexFunc(policies, func(policy interfaces.Policy) bool {
+			return policy.ID == policyName || strings.EqualFold(policy.Description, policyName)
+		})
+		if idx < 0 {
 			missing = append(missing, policyName)
 			continue
 		}
-		log.Debug().Str("policy", policyName).Int("mark", int(mark)).Msg("bypassing policy traffic")
-		marks = append(marks, mark)
+		log.Debug().Str("policy", policyName).Int("mark", int(policies[idx].Mark)).Msg("bypassing policy traffic")
+		marks = append(marks, policies[idx].Mark)
 	}
 	return marks, missing
 }

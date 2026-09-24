@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 )
 
@@ -77,11 +78,12 @@ func TestKeeneticRouterSpecificAPIGetIfaceAliasesUsesBatchRCI(t *testing.T) {
 	}
 }
 
-func TestKeeneticRouterSpecificAPIGetPolicyMarks(t *testing.T) {
+func TestKeeneticRouterSpecificAPIGetPolicies(t *testing.T) {
 	policies := map[string]keeneticPolicyMeta{
-		"Policy0": {Description: "Germany-AWG", Mark: "ffffaaa"},
 		"Policy4": {Description: "noMT", Mark: "ffffaad"},
-		"Policy5": {Description: "Policy0", Mark: "ffffaaf"},
+		"Policy0": {Description: "Germany-AWG", Mark: "ffffaaa"},
+		"Policy3": {Description: " WG>WARP>VLESS ", Mark: "0xffffaae"},
+		"Policy9": {Description: "without mark"},
 	}
 	for name, payload := range map[string]any{
 		"plain":   policies,
@@ -105,27 +107,21 @@ func TestKeeneticRouterSpecificAPIGetPolicyMarks(t *testing.T) {
 				Client:  server.Client(),
 			}
 
-			marks, err := api.GetPolicyMarks()
+			got, err := api.GetPolicies()
 			if err != nil {
-				t.Fatalf("GetPolicyMarks returned error: %v", err)
+				t.Fatalf("GetPolicies returned error: %v", err)
 			}
 			if requests != 1 {
 				t.Fatalf("policy list request count = %d, want 1", requests)
 			}
-			if marks["noMT"] != 0xffffaad {
-				t.Fatalf("marks[noMT] = %#x, want 0xffffaad", marks["noMT"])
+
+			expected := []Policy{
+				{ID: "Policy0", Description: "Germany-AWG", Mark: 0xffffaaa},
+				{ID: "Policy3", Description: "WG>WARP>VLESS", Mark: 0xffffaae},
+				{ID: "Policy4", Description: "noMT", Mark: 0xffffaad},
 			}
-			if marks["Policy4"] != 0xffffaad {
-				t.Fatalf("marks[Policy4] = %#x, want 0xffffaad", marks["Policy4"])
-			}
-			if marks["Policy0"] != 0xffffaaa {
-				t.Fatalf("marks[Policy0] = %#x, want 0xffffaaa (system name must win over description)", marks["Policy0"])
-			}
-			if _, ok := marks["missing"]; ok {
-				t.Fatalf("marks should not contain unknown policy")
-			}
-			if len(marks) != 5 {
-				t.Fatalf("marks = %v, want 3 system names and 2 descriptions", marks)
+			if !reflect.DeepEqual(got, expected) {
+				t.Fatalf("GetPolicies() = %+v, want %+v", got, expected)
 			}
 		})
 	}

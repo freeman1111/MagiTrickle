@@ -13,6 +13,7 @@ type Helper struct {
 	StartIdx    uint32
 	Links       []string
 	BypassMarks BypassMarks
+	Policies    PolicyMarks
 }
 
 func New(chainPrefix, ipsetPrefix string, disableIPv4, disableIPv6 bool, startIdx uint32, links []string) (*Helper, error) {

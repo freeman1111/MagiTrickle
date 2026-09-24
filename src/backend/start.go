@@ -60,7 +60,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 	}
 	a.nfHelper = nfh
 
-	a.setupBypassPolicies(ctx)
+	a.setupPolicies(ctx)
 
 	for _, ipt := range []*iptables.IPTables{a.nfHelper.IPTables4, a.nfHelper.IPTables6} {
 		if ipt == nil {
@@ -160,7 +160,7 @@ func (a *App) Start(ctx context.Context) (err error) {
 }
 
 func (a *App) ForceCommitIPTables() error {
-	a.requestBypassMarksRefresh()
+	a.requestPoliciesRefresh()
 
 	if a.nfHelper == nil {
 		return nil

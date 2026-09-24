@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -97,8 +98,8 @@ func (a *KeeneticRouterSpecificAPI) GetIfaceAliases() (map[string]string, error)
 	return aliases, nil
 }
 
-// GetPolicyMarks возвращает fwmark всех политик одним запросом, ключи: системное имя (Policy0) и описание из веб-интерфейса
-func (a *KeeneticRouterSpecificAPI) GetPolicyMarks() (map[string]uint32, error) {
+// GetPolicies возвращает все политики доступа одним запросом, отсортированные по системному имени
+func (a *KeeneticRouterSpecificAPI) GetPolicies() ([]Policy, error) {
 	resp, err := a.httpClient().Get(a.baseURL() + "/rci/show/ip/policy")
 	if err != nil {
 		return nil, err
@@ -121,28 +122,28 @@ func (a *KeeneticRouterSpecificAPI) GetPolicyMarks() (map[string]uint32, error) 
 		}
 	}
 
-	marks := make(map[string]uint32, len(payload)*2)
-	systemNames := make(map[string]uint32, len(payload))
+	policies := make([]Policy, 0, len(payload))
 	for policyID, raw := range payload {
 		var meta keeneticPolicyMeta
 		if err := json.Unmarshal(raw, &meta); err != nil {
 			continue
 		}
+		// политика без метки ещё не готова к маршрутизации
 		value, err := strconv.ParseUint(strings.TrimPrefix(meta.Mark, "0x"), 16, 32)
 		if err != nil {
 			continue
 		}
-		systemNames[policyID] = uint32(value)
-		if description := strings.TrimSpace(meta.Description); description != "" {
-			marks[description] = uint32(value)
-		}
+		policies = append(policies, Policy{
+			ID:          policyID,
+			Description: strings.TrimSpace(meta.Description),
+			Mark:        uint32(value),
+		})
 	}
-	// системное имя важнее описания, если они совпали у разных политик
-	for policyID, mark := range systemNames {
-		marks[policyID] = mark
-	}
+	slices.SortFunc(policies, func(a, b Policy) int {
+		return strings.Compare(a.ID, b.ID)
+	})
 
-	return marks, nil
+	return policies, nil
 }
 
 func (a *KeeneticRouterSpecificAPI) httpClient() *http.Client {

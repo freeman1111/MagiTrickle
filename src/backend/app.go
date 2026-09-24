@@ -43,7 +43,7 @@ type App struct {
 	dnsOverrider         *netfilterTools.PortRemap
 	subscriptions        []*models.Subscription
 
-	bypassMarksRefresh chan struct{}
+	policiesRefresh chan struct{}
 }
 
 // New создаёт новый экземпляр App

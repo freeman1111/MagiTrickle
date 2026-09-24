@@ -3,17 +3,17 @@ package magitrickle
 import (
 	"reflect"
 	"testing"
+
+	"magitrickle/internal/interfaces"
 )
 
 func TestPickBypassMarks(t *testing.T) {
-	policyMarks := map[string]uint32{
-		"Policy0":     0xffffaaa,
-		"Germany-AWG": 0xffffaaa,
-		"Policy4":     0xffffaad,
-		"noMT":        0xffffaad,
+	policies := []interfaces.Policy{
+		{ID: "Policy0", Description: "Germany-AWG", Mark: 0xffffaaa},
+		{ID: "Policy4", Description: "noMT", Mark: 0xffffaad},
 	}
 
-	marks, missing := pickBypassMarks([]string{"noMT", "unknown", "Policy0"}, policyMarks)
+	marks, missing := pickBypassMarks([]string{"NOMT", "unknown", "Policy0"}, policies)
 
 	if expected := []uint32{0xffffaad, 0xffffaaa}; !reflect.DeepEqual(marks, expected) {
 		t.Errorf("marks = %#x, want %#x", marks, expected)

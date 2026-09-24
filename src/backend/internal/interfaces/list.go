@@ -1,6 +1,7 @@
 package interfaces
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"slices"
@@ -33,13 +34,34 @@ func List(showAll bool) ([]models.InterfaceInfo, error) {
 			Name: friendlyNames[iface.Name],
 		})
 	}
+	interfaces = append(interfaces, listPolicies()...)
 
 	return interfaces, nil
 }
 
-// GetPolicyMarks возвращает fwmark политик доступа по их системным именам и описаниям
-func GetPolicyMarks() (map[string]uint32, error) {
-	return routerAPI.GetPolicyMarks()
+// GetPolicies возвращает политики доступа роутера
+func GetPolicies() ([]Policy, error) {
+	return routerAPI.GetPolicies()
+}
+
+// listPolicies добавляет политики доступа в список целей маршрутизации группы
+func listPolicies() []models.InterfaceInfo {
+	policies, err := routerAPI.GetPolicies()
+	if err != nil {
+		if !errors.Is(err, ErrPoliciesNotSupported) {
+			log.Debug().Err(err).Msg("failed to load access policies")
+		}
+		return nil
+	}
+
+	result := make([]models.InterfaceInfo, 0, len(policies))
+	for _, policy := range policies {
+		result = append(result, models.InterfaceInfo{
+			ID:   policy.ID,
+			Name: policy.Description,
+		})
+	}
+	return result
 }
 
 func filterManaged(interfaces []net.Interface) []net.Interface {

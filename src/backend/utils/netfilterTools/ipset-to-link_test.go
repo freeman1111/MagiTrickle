@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	"magitrickle/utils/iptables"
+
+	"github.com/vishvananda/netlink"
 )
 
 func newTestIPTables(fake *iptables.FakeIPTables) *iptables.IPTables {
@@ -111,5 +113,62 @@ func TestIPSetToLinkRefreshIPTablesRules(t *testing.T) {
 	expectedJumps := [][]string{{"-i", "br0", "-j", "MT_test"}}
 	if rules := fake.GetRules("mangle", "PREROUTING"); !reflect.DeepEqual(rules, expectedJumps) {
 		t.Errorf("PREROUTING rules must not be duplicated.\nExpected: %v\nGot: %v", expectedJumps, rules)
+	}
+}
+
+// TestIPSetToLinkPolicyTarget проверяет группу, направленную в политику доступа роутера
+func TestIPSetToLinkPolicyTarget(t *testing.T) {
+	fake := iptables.NewFakeIPTables(iptables.ProtocolIPv4)
+	nh := &Helper{ChainPrefix: "MT_", IpsetPrefix: "mt_", Links: []string{"br0"}, IPTables4: newTestIPTables(fake)}
+	nh.Policies.Store(map[string]uint32{"Policy3": 0xffffaae})
+	r := nh.IPSetToLink("test", "Policy3", nh.IPSet("test"))
+
+	if err := r.Enable(); err != nil {
+		t.Fatalf("Enable failed: %v", err)
+	}
+	if !r.policy || r.mark != 0xffffaae || r.table != 0 {
+		t.Fatalf("policy=%v mark=%#x table=%d, want policy mark 0xffffaae without own table", r.policy, r.mark, r.table)
+	}
+	if r.ip4Rule != nil || r.ip4Route[0] != nil || r.ip4Route[1] != nil {
+		t.Fatalf("policy target must not create own ip rules and routes")
+	}
+	if rules := fake.GetRules("filter", "MT_test"); len(rules) != 0 {
+		t.Errorf("policy target must not add -o rules, got: %v", rules)
+	}
+
+	expected := [][]string{
+		{"-m", "conntrack", "--ctdir", "REPLY", "-j", "RETURN"},
+		{"-m", "set", "--match-set", "mt_test_4", "dst", "-j", "MARK", "--set-mark", "268434094"},
+		{"-m", "set", "--match-set", "mt_test_4", "dst", "-j", "CONNMARK", "--save-mark"},
+	}
+	if rules := fake.GetRules("mangle", "MT_test"); !reflect.DeepEqual(rules, expected) {
+		t.Errorf("chain rules mismatch.\nExpected: %v\nGot: %v", expected, rules)
+	}
+
+	if err := r.AddrChangeHook(netlink.AddrUpdate{}); err != nil {
+		t.Errorf("AddrChangeHook must ignore policy targets, got: %v", err)
+	}
+	if err := r.LinkUpHook(netlink.LinkUpdate{Link: &netlink.Dummy{LinkAttrs: netlink.LinkAttrs{Name: "Policy3"}}}); err != nil {
+		t.Errorf("LinkUpHook must ignore policy targets, got: %v", err)
+	}
+
+	nh.Policies.Store(map[string]uint32{"Policy3": 0xffffaa1})
+	if err := r.RefreshIPTablesRules(); err != nil {
+		t.Fatalf("RefreshIPTablesRules failed: %v", err)
+	}
+	expected[1] = []string{"-m", "set", "--match-set", "mt_test_4", "dst", "-j", "MARK", "--set-mark", "268434081"}
+	if rules := fake.GetRules("mangle", "MT_test"); !reflect.DeepEqual(rules, expected) {
+		t.Errorf("chain rules after mark change mismatch.\nExpected: %v\nGot: %v", expected, rules)
+	}
+	expectedJumps := [][]string{{"-i", "br0", "-j", "MT_test"}}
+	if rules := fake.GetRules("mangle", "PREROUTING"); !reflect.DeepEqual(rules, expectedJumps) {
+		t.Errorf("PREROUTING rules mismatch.\nExpected: %v\nGot: %v", expectedJumps, rules)
+	}
+
+	if err := r.Disable(); err != nil {
+		t.Fatalf("Disable failed: %v", err)
+	}
+	if fake.ChainExists("mangle", "MT_test") || len(fake.GetRules("mangle", "PREROUTING")) != 0 {
+		t.Errorf("Disable must remove chain and jumps")
 	}
 }
