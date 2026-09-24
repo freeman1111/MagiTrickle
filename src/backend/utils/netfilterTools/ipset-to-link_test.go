@@ -172,3 +172,24 @@ func TestIPSetToLinkPolicyTarget(t *testing.T) {
 		t.Errorf("Disable must remove chain and jumps")
 	}
 }
+
+// TestIPSetToLinkLongTargetName проверяет, что длинное имя цели (политика до ответа RCI) не ломает правила iptables
+func TestIPSetToLinkLongTargetName(t *testing.T) {
+	fake := iptables.NewFakeIPTables(iptables.ProtocolIPv4)
+	nh := &Helper{ChainPrefix: "MT_", IpsetPrefix: "mt_", Links: []string{"br0"}}
+	r := nh.IPSetToLink("test", "VeryLongPolicyName", nh.IPSet("test"))
+	r.mark = 1
+
+	if r.routesViaLink() {
+		t.Fatalf("name longer than IFNAMSIZ must not be treated as an interface")
+	}
+	if err := r.insertIPTablesRules(newTestIPTables(fake)); err != nil {
+		t.Fatalf("insertIPTablesRules failed: %v", err)
+	}
+	if rules := fake.GetRules("filter", "MT_test"); len(rules) != 0 {
+		t.Errorf("no -o rule expected for invalid interface name, got: %v", rules)
+	}
+	if err := r.AddrChangeHook(netlink.AddrUpdate{}); err != nil {
+		t.Errorf("AddrChangeHook must ignore non-interface targets, got: %v", err)
+	}
+}

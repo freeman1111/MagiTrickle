@@ -24,7 +24,6 @@ type IPSetToLink struct {
 
 	chainName string
 	ifaceName string
-	policy    bool
 	startIdx  uint32
 	links     []string
 	ipset     *IPSet
@@ -35,6 +34,7 @@ type IPSetToLink struct {
 	ip6Rule   *netlink.Rule
 	ip4Route  [2]*netlink.Route
 	ip6Route  [2]*netlink.Route
+	policy    bool
 }
 
 func (r *IPSetToLink) insertIPTablesRules(ipt *iptables.IPTables) error {
@@ -58,7 +58,7 @@ func (r *IPSetToLink) insertIPTablesRules(ipt *iptables.IPTables) error {
 		return fmt.Errorf("failed to create chain: %w", err)
 	}
 
-	if r.ifaceName != Blackhole && !r.policy {
+	if r.routesViaLink() {
 		err = ipt.Append("filter", r.chainName, "-o", r.ifaceName, "-m", "set", "--match-set", ipsetName, "dst", "-j", "ACCEPT")
 		if err != nil {
 			return fmt.Errorf("failed to fix protect for IPv4: %w", err)
@@ -522,7 +522,7 @@ func (r *IPSetToLink) LinkUpHook(event netlink.LinkUpdate) error {
 	r.locker.Lock()
 	defer r.locker.Unlock()
 
-	if !r.enabled.Load() || r.policy || event.Link.Attrs().Name != r.ifaceName {
+	if !r.enabled.Load() || !r.routesViaLink() || event.Link.Attrs().Name != r.ifaceName {
 		return nil
 	}
 
@@ -535,7 +535,7 @@ func (r *IPSetToLink) AddrChangeHook(event netlink.AddrUpdate) error {
 	r.locker.Lock()
 	defer r.locker.Unlock()
 
-	if !r.enabled.Load() || r.ifaceName == Blackhole || r.policy {
+	if !r.enabled.Load() || !r.routesViaLink() {
 		return nil
 	}
 

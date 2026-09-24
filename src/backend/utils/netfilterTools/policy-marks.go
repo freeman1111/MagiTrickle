@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/rs/zerolog/log"
+	"golang.org/x/sys/unix"
 )
 
 // BypassMarks хранит fwmark политик доступа, трафик которых группы не маркируют
@@ -65,6 +66,12 @@ func (r *IPSetToLink) enablePolicy() (bool, error) {
 		return true, err
 	}
 	return true, nil
+}
+
+// routesViaLink сообщает, что группа направлена в сетевой интерфейс, а не в blackhole или политику доступа.
+// Имя длиннее допустимого для интерфейса (например, политика, пока RCI не ответил) iptables бы отверг
+func (r *IPSetToLink) routesViaLink() bool {
+	return r.ifaceName != Blackhole && !r.policy && len(r.ifaceName) < unix.IFNAMSIZ
 }
 
 // RefreshIPTablesRules пересобирает правила включённой связки после изменения политик доступа.
