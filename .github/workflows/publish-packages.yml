@@ -1,0 +1,69 @@
+# Fork-only workflow: builds Entware packages and publishes them as opkg feeds to the `packages` branch.
+# The branch always holds a single commit (force-pushed), so binaries never pile up in git history.
+#
+#   https://raw.githubusercontent.com/<owner>/<repo>/packages/entware/<target>/magitrickle.ipk
+name: Publish packages
+
+on:
+  push:
+    branches:
+      - develop
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-packages
+  cancel-in-progress: true
+
+jobs:
+  publish:
+    name: Build and publish Entware feeds
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch upstream version tags
+        # the package version is derived from the latest tag (see Makefile); forks have no tags
+        run: git fetch --tags https://gitlab.com/magitrickle/magitrickle.git
+
+      - name: Set up Node.JS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: src/backend/go.sum
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y fakeroot upx
+
+      - name: Build packages
+        env:
+          BASE_URL: https://raw.githubusercontent.com/${{ github.repository }}/packages
+        run: scripts/publish-packages.sh "$RUNNER_TEMP/feed" config/entware/*.config
+
+      - name: Push packages branch
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cd "$RUNNER_TEMP/feed"
+          git init -q
+          git checkout -q -b packages
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Packages built from ${GITHUB_SHA::7}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" packages

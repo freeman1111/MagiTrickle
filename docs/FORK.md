@@ -203,6 +203,33 @@ cd src/backend
 go test -tags "testing entware_kn" ./...
 ```
 
+## Установка готовой сборки по ссылке
+
+Готовые пакеты лежат в отдельной ветке `packages`, а не рядом с кодом. В ветке всегда один коммит,
+поэтому бинарники не копятся в истории. Для каждой платформы там есть пакет с постоянным именем и индекс
+`Packages`, то есть это полноценный репозиторий opkg.
+
+Установка или обновление одной командой, ссылка не меняется от сборки к сборке:
+
+```sh
+# Keenetic на aarch64 (Entware aarch64-3.10_kn)
+opkg install https://raw.githubusercontent.com/freeman1111/MagiTrickle/packages/entware/aarch64-3.10_kn/magitrickle.ipk
+```
+
+Для других моделей замените `aarch64-3.10_kn` на свою платформу из папки `config/entware/`.
+Список собранных платформ и команды для них лежат в `README.md` ветки `packages`.
+
+Если opkg не умеет скачивать по https, один раз поставьте `wget-ssl` (`opkg install wget-ssl`).
+
+Как ветка обновляется:
+
+- автоматически: workflow `.github/workflows/publish-packages.yml` собирает все платформы Entware при
+  каждом push в `develop` и перезаписывает ветку `packages`. Его можно запустить и вручную
+  (*Actions → Publish packages → Run workflow*). Версию пакета он берёт из тегов автора, поэтому новая
+  сборка всегда новее установленной;
+- вручную: `scripts/publish-packages.sh <папка> [config/entware/<платформа>.config ...]` собирает
+  пакеты и индексы в указанную папку, её содержимое и есть ветка `packages`.
+
 ## Выпуск релиза форка
 
 1. Обновиться из upstream (см. выше), убедиться, что `develop` собирается.
