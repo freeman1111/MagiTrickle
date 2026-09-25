@@ -1,0 +1,14 @@
+Package: magitrickle
+Version: 0.8.3~git20260925202912.8ee307f-1
+Architecture: armv7-3.2
+License: GPL-3.0-or-later
+URL: https://github.com/freeman1111/MagiTrickle
+Maintainer: freeman1111 <https://github.com/freeman1111/MagiTrickle/issues>
+Description: DNS-based routing application (unofficial fork of MagiTrickle, https://gitlab.com/magitrickle/magitrickle)
+Section: net
+Priority: optional
+Depends: libc, iptables
+Filename: magitrickle_0.8.3~git20260925202912.8ee307f-1_armv7-3.2.ipk
+Size: 2641172
+SHA256sum: 1a85db0c435ac4f77bd044d4273ad5ae69871544632c8e046268d3d64cd01f5e
+

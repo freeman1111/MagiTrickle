@@ -1,0 +1,14 @@
+Package: magitrickle
+Version: 0.8.3~git20260925202912.8ee307f-1
+Architecture: mips-3.4
+License: GPL-3.0-or-later
+URL: https://github.com/freeman1111/MagiTrickle
+Maintainer: freeman1111 <https://github.com/freeman1111/MagiTrickle/issues>
+Description: DNS-based routing application (unofficial fork of MagiTrickle, https://gitlab.com/magitrickle/magitrickle)
+Section: net
+Priority: optional
+Depends: libc, iptables
+Filename: magitrickle_0.8.3~git20260925202912.8ee307f-1_mips-3.4.ipk
+Size: 2567523
+SHA256sum: bc809e4b63fc8b094c04265b60c97c02a938310945e9f911d3fa919bfb1ecdcd
+
