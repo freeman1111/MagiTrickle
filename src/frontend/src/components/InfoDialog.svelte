@@ -1,5 +1,6 @@
 <script lang="ts">
   import { t } from "../data/locale.svelte";
+  import ForkNotice from "./ForkNotice.svelte";
   import GenericDialog from "./ui/GenericDialog.svelte";
   import GenericIcon from "./ui/GenericIcon.svelte";
 
@@ -17,6 +18,7 @@
 <GenericDialog {open} title={t("About")} on:close={() => (open = false)} maxWidth={420}>
   <div slot="body">
     <div class="container">
+      <ForkNotice />
       <div class="block">
         <div class="icon">
           <Globe size={22} />

@@ -1,3 +1,9 @@
+> **Это неофициальный форк [MagiTrickle](https://gitlab.com/magitrickle/magitrickle).**
+> Оригинал разрабатывают Vladimir Avtsenov и участники проекта, форк поддерживает [freeman1111](https://github.com/freeman1111/MagiTrickle).
+> Форк изменён относительно оригинала начиная с 23.09.2026: что изменено и как установить сборку форка, описано в [docs/FORK.md](docs/FORK.md).
+> С вопросами и ошибками форка обращайтесь в [issues форка](https://github.com/freeman1111/MagiTrickle/issues), а не к авторам оригинала.
+> Ниже README оригинального проекта без изменений: инструкции по установке в нём ставят оригинальную версию.
+
 <p align="center">
   <img src="https://gitlab.com/magitrickle/magitrickle/-/raw/develop/img/logo256.png" alt="MagiTrickle logo"/>
 </p>
