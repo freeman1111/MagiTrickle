@@ -17,6 +17,7 @@ import (
 	"magitrickle/utils/recordsCache"
 
 	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"github.com/vishvananda/netlink"
 	"github.com/vishvananda/netlink/nl"
 )
@@ -54,12 +55,13 @@ func (a *App) Start(ctx context.Context) (err error) {
 	a.recordsCache = recordsCache.New()
 	a.recordsCache.StartCleanup(ctx, 30*time.Second)
 
-	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex, a.config.Link)
+	nfh, err := netfilterTools.New(a.config.Netfilter.IPTables.ChainPrefix, a.config.Netfilter.IPSet.TablePrefix, a.config.Netfilter.DisableIPv4, a.config.Netfilter.DisableIPv6, a.config.Netfilter.StartMarkTableIndex)
 	if err != nil {
 		return fmt.Errorf("netfilter helper init fail: %w", err)
 	}
 	a.nfHelper = nfh
 
+	a.nfHelper.Links = a.config.Link
 	a.setupPolicies(ctx)
 
 	for _, ipt := range []*iptables.IPTables{a.nfHelper.IPTables4, a.nfHelper.IPTables6} {
@@ -74,6 +76,14 @@ func (a *App) Start(ctx context.Context) (err error) {
 
 	if err := a.nfHelper.CleanIPTables(); err != nil {
 		return fmt.Errorf("failed to clear iptables: %w", err)
+	}
+	if err := a.nfHelper.CleanIPSets(); err != nil {
+		// Not fatal: groups recreate their own sets, a stale one is only clutter.
+		log.Warn().Err(err).Msg("failed to clear stale ipsets")
+	}
+	if err := a.nfHelper.CleanIPRules(); err != nil {
+		// Not fatal either: new groups skip the indexes that are still taken, a leftover rule is only clutter.
+		log.Warn().Err(err).Msg("failed to clear stale ip rules")
 	}
 
 	linkUpdateChannel, linkUpdateDone, err := subscribeLinkUpdates()
