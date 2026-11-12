@@ -24,6 +24,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          git fetch --no-tags https://github.com/dan0102dan/mt-c.git refs/tags/0.8.6:refs/tags/0.8.6
           cp config/entware/aarch64-3.10_kn.config .config
           mkdir -p .build "$RUNNER_TEMP/mt-c-feed/mt-c" "$RUNNER_TEMP/mt-c-artifacts"
           eval export $(make _return_export_dynamic_env)
